@@ -1,0 +1,57 @@
+aiml==0.8.6
+backports.weakref==1.0.post1
+bleach==1.5.0
+certifi==2017.7.27.1
+chardet==3.0.4
+click==6.7
+Django==1.10.2
+django-social-auth==0.7.28
+enum34==1.1.6
+Flask==0.12.2
+Flask-CLI==0.4.0
+funcsigs==1.0.2
+future==0.16.0
+futures==3.2.0
+-e git+https://github.com/openai/gym.git@efeadfdd20992aeba69e038205af90d340c5f95b#egg=gym
+-e git+https://github.com/lusob/gym-ple.git@3e35d653d6a27794f0d88a1c4e55dc820bfe1301#egg=gym_ple
+h5py==2.7.1
+html5lib==0.9999999
+httplib2==0.10.3
+idna==2.5
+inflection==0.3.1
+itsdangerous==0.24
+Jinja2==2.10
+Keras==2.1.2
+Markdown==2.6.10
+MarkupSafe==1.0
+mock==2.0.0
+more-itertools==3.2.0
+numpy==1.13.3
+oauth2==1.9.0.post1
+olefile==0.44
+pandas==0.20.3
+pbr==3.1.1
+Pillow==4.3.0
+-e git+https://github.com/ntasfi/PyGame-Learning-Environment.git@50aa299a3b519029f3fd123b4cce6d34edbfa0dc#egg=ple
+protobuf==3.0.0b2
+pyglet==1.3.0
+pysqlite==2.8.3
+python-dateutil==2.6.1
+python-instagram==1.3.2
+python-openid==2.2.5
+pytz==2017.2
+PyYAML==3.12
+Quandl==3.2.0
+requests==2.17.3
+scikit-learn==0.19.0
+scipy==1.0.0
+simplejson==3.10.0
+six==1.11.0
+sklearn==0.0
+-e git+https://github.com/pygame/pygame/#egg=pygame
+tensorflow==0.10.0rc0
+tensorflow-tensorboard==0.4.0rc3
+Theano==1.0.1
+urllib3==1.21.1
+virtualenv==15.1.0
+Werkzeug==0.13
