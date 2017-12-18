@@ -258,7 +258,7 @@ class SnakeQNetwork:
     #     return resized_observation_image
 
     def __initialize_nn(self):
-        nn_input_layer_size = self.env.getScreenDims[0] * self.env.getScreenDims[1]
+        nn_input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
         nn_hidden_layer_size = 100
         nn_output_layer_size = 1  # 1 possible action outcome
 

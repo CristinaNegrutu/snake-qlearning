@@ -13,64 +13,47 @@
 # limitations under the License.
 # ==============================================================================
 
-# pylint: disable=g-short-docstring-punctuation
-"""## Unit tests
+"""Testing.
 
-TensorFlow provides a convenience class inheriting from `unittest.TestCase`
-which adds methods relevant to TensorFlow tests.  Here is an example:
+See the @{$python/test} guide.
 
-    import tensorflow as tf
-
-
-    class SquareTest(tf.test.TestCase):
-
-      def testSquare(self):
-        with self.test_session():
-          x = tf.square([2, 3])
-          self.assertAllEqual(x.eval(), [4, 9])
-
-
-    if __name__ == '__main__':
-      tf.test.main()
-
-
-`tf.test.TestCase` inherits from `unittest.TestCase` but adds a few additional
-methods.  We will document these methods soon.
+Note: `tf.test.mock` is an alias to the python `mock` or `unittest.mock`
+depending on the python version.
 
 @@main
-
-## Utilities
-
+@@TestCase
+@@test_src_dir_path
 @@assert_equal_graph_def
 @@get_temp_dir
 @@is_built_with_cuda
-
-## Gradient checking
-
-[`compute_gradient`](#compute_gradient) and
-[`compute_gradient_error`](#compute_gradient_error) perform numerical
-differentiation of graphs for comparison against registered analytic gradients.
-
+@@is_gpu_available
+@@gpu_device_name
 @@compute_gradient
 @@compute_gradient_error
+@@create_local_cluster
 
 """
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.client import device_lib
-from tensorflow.python.framework import test_util
-from tensorflow.python.platform import googletest
-from tensorflow.python.util.all_util import make_all
+
+# pylint: disable=g-bad-import-order
+from tensorflow.python.framework import test_util as _test_util
+from tensorflow.python.platform import googletest as _googletest
+from tensorflow.python.util.all_util import remove_undocumented
 
 # pylint: disable=unused-import
-from tensorflow.python.framework.test_util import TensorFlowTestCase as TestCase
 from tensorflow.python.framework.test_util import assert_equal_graph_def
+from tensorflow.python.framework.test_util import create_local_cluster
+from tensorflow.python.framework.test_util import TensorFlowTestCase as TestCase
+from tensorflow.python.framework.test_util import gpu_device_name
+from tensorflow.python.framework.test_util import is_gpu_available
 
 from tensorflow.python.ops.gradient_checker import compute_gradient_error
 from tensorflow.python.ops.gradient_checker import compute_gradient
-# pylint: enable=unused-import
+# pylint: enable=unused-import,g-bad-import-order
 
 import sys
 if sys.version_info.major == 2:
@@ -79,12 +62,15 @@ else:
   from unittest import mock  # pylint: disable=g-import-not-at-top
 
 # Import Benchmark class
-Benchmark = googletest.Benchmark  # pylint: disable=invalid-name
+Benchmark = _googletest.Benchmark  # pylint: disable=invalid-name
+
+# Import StubOutForTesting class
+StubOutForTesting = _googletest.StubOutForTesting  # pylint: disable=invalid-name
 
 
-def main():
+def main(argv=None):
   """Runs all unit tests."""
-  return googletest.main()
+  return _googletest.main(argv)
 
 
 def get_temp_dir():
@@ -95,7 +81,7 @@ def get_temp_dir():
   Returns:
     The temporary directory.
   """
-  return googletest.GetTempDir()
+  return _googletest.GetTempDir()
 
 
 def test_src_dir_path(relative_path):
@@ -108,19 +94,19 @@ def test_src_dir_path(relative_path):
   Returns:
     An absolute path to the linked in runfiles.
   """
-  return googletest.test_src_dir_path(relative_path)
+  return _googletest.test_src_dir_path(relative_path)
 
 
 def is_built_with_cuda():
   """Returns whether TensorFlow was built with CUDA (GPU) support."""
-  return test_util.IsGoogleCudaEnabled()
+  return _test_util.IsGoogleCudaEnabled()
 
 
-def is_gpu_available():
-  """Returns whether TensorFlow can access a GPU."""
-  return any(x.device_type == 'GPU' for x in device_lib.list_local_devices())
+_allowed_symbols = [
+    # We piggy-back googletest documentation.
+    'Benchmark',
+    'mock',
+    'StubOutForTesting',
+]
 
-
-__all__ = make_all(__name__)
-# TODO(irving,vrv): Remove once TestCase is documented
-__all__.append('TestCase')
+remove_undocumented(__name__, _allowed_symbols)
