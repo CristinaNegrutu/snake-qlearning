@@ -57,15 +57,21 @@ class SnakeQNetwork:
 
         self.state_prediction_nn = None
         self.nn_initialized = False
-        game = Snake(width=64, height=64)
-        env = PLE(game)
+        pygame.init()
+
+        game = Snake(width=200, height=200)
+        game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)
+        game.clock = pygame.time.Clock()
+        game.rng = np.random.RandomState(24)
+        self.game = game
+        env = PLE(self.game, display_screen=True, fps=30)
         env.init()
         self.env = env
 
     def run(self, episode_count=1000, learning_rate=0.5, training=False):
         for episode_idx in range(0, episode_count):
             self.LOG.info("Episode #{n} started.".format(n=episode_idx))
-
+            self.game.init()
             observation = self.env.getScreenGrayscale()
             # observation_object = self.__downscale_image(observation)
 
@@ -82,14 +88,19 @@ class SnakeQNetwork:
                     x=observation.reshape(1, observation_width * observation_height),
                     batch_size=1)
 
-                print "q_values:::, ", q_values
                 old_observation = copy.deepcopy(observation)
-                print "q values ", q_values
+                print "q_values ", q_values
                 snake_action = (np.argmax(q_values))  # the predicted action
                 index_of_action_in_q_values = np.where(q_values == snake_action)
                 observation = self.env.getScreenGrayscale()
                 # observation = self.__downscale_image(observation)
                 reward = self.__take_snake_action(index_of_action_in_q_values)
+
+                dt = self.game.clock.tick_busy_loop(100)
+                self.game.step(dt)
+                pygame.display.update()
+                print "\n", self.game.getGameState() ,"\n"
+
                 done = self.env.game_over()
                 self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
 
@@ -136,7 +147,7 @@ class SnakeQNetwork:
                             training_q_values[0][2] = 0
                             training_q_values[0][3] = 0
 
-                            print "action.......", action
+                            # print "action.......", action
                             training_q_values[0][action] = output_update
 
                             nn_training_batch_data.append(old_state.reshape(observation_width * observation_height, ))
