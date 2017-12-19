@@ -14,102 +14,7 @@ from collections import deque
 
 import gym_ple  # Do not delete, even if IDE says it's not used
 
-
-# import gym
-# import matplotlib
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from keras.layers import Dense, copy
-# from keras.models import Sequential
-# from keras.utils.visualize_util import plot
-
-# from utils import GrayscaleConverter, ImageResizer
-
-
-#
-# class SnakeGame:
-#     def __init__(self, player):
-#         self.player = player
-#
-#     def get_input(self):
-#         self.player.runs += 1
-#
-#
-# class QLearningPlayer:
-#     def __init__(self, game):
-#         self.map_x = 64
-#         self.map_y = 64
-#
-#         self.actions = game.actions
-#         self.first_run = True
-#
-#         self.discount = 0.9
-#         self.epsilon = 0.1
-#         self.max_epsilon = 0.9
-#         self.epsilon_increase = 800.0
-#
-#         self.replay_memory_size = 500
-#         self.replay_memory = list()
-#         self.batch_size = 400
-#
-#         self.runs = 0
-#
-#         self.r = random.random()
-#         self.game = game
-#
-#
-# class SnakeQNetwork:
-#     def __init__(self, screen_width, screen_length, actions_count):
-#         # width * length + actions.length
-#         self.input_layer_size = screen_width * screen_length + actions_count
-#
-#         # width * length + actions.length
-#         self.hidden_layer_size = screen_width * screen_length + actions_count
-#         self.output_layer_size = 1  # one node representing the score of the move
-#
-#         self.state_prediction = None
-#         self.initialized = False
-#
-#     def init_network(self):
-#         input_layer = Dense(
-#             init='lecun_uniform',  # uniform initialization scaled by the square root of the number of inputs
-#             output_dim=self.hidden_layer_size,
-#             input_shape=(self.input_layer_size,),
-#             activation='sigmoid')
-#
-#         hidden_layer = Dense(
-#             init='lecun_uniform',
-#             output_dim=self.output_layer_size,
-#             activation='linear'  # Pass value along -> f(x) = x
-#         )
-#
-#         self.state_prediction = Sequential()
-#         self.state_prediction.add(input_layer)
-#         self.state_prediction.add(hidden_layer)
-#
-#         self.state_prediction.compile(
-#             optimizer='rmsprop',
-#             loss='mean_squared_error')
-#
-#
-# if __name__ == "__main__":
-#
-#     pygame.init()
-#     game = Snake(width=64, height=64)
-#     game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)
-#     game.clock = pygame.time.Clock()
-#     game.rng = np.random.RandomState(24)
-#     game.init()
-#
-#     while True:
-#         if game.game_over():
-#             game.init()
-#
-#         dt = game.clock.tick_busy_loop(30)
-#         game.step(dt)
-#         pygame.display.update()
-#         print game.getScreenRGB()
-#         break
+from utils import GrayscaleConverter, ImageResizer
 
 
 class QLearningHistory:
@@ -161,7 +66,8 @@ class SnakeQNetwork:
         for episode_idx in range(0, episode_count):
             self.LOG.info("Episode #{n} started.".format(n=episode_idx))
 
-            observation_object = self.env.getScreenRGB()
+            observation = self.env.getScreenGrayscale()
+            # observation_object = self.__downscale_image(observation)
 
             if not self.nn_initialized:
                 self.__initialize_nn()
@@ -170,19 +76,21 @@ class SnakeQNetwork:
 
             observation_width = self.env.getScreenDims()[0]
             observation_height = self.env.getScreenDims()[1]
-            observation = observation_object
 
             while True:
                 q_values = self.state_prediction_nn.predict(
                     x=observation.reshape(1, observation_width * observation_height),
                     batch_size=1)
-                old_observation = copy.deepcopy(observation)
 
-                snake_action = q_values  # the predicted action
-                observation = self.env.getScreenRGB()
-                reward = self.__take_snake_action(snake_action)
-                done = self.env.gameOver()
-                # observation = self.__downscale_image(observation_object).data
+                print "q_values:::, ", q_values
+                old_observation = copy.deepcopy(observation)
+                print "q values ", q_values
+                snake_action = (np.argmax(q_values))  # the predicted action
+                index_of_action_in_q_values = np.where(q_values == snake_action)
+                observation = self.env.getScreenGrayscale()
+                # observation = self.__downscale_image(observation)
+                reward = self.__take_snake_action(index_of_action_in_q_values)
+                done = self.env.game_over()
                 self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
 
                 if training:
@@ -223,8 +131,13 @@ class SnakeQNetwork:
 
                             output_update = learning_rate * (reward + (self.discount_factor * best_q_value_after_action))
 
+                            training_q_values[0][0] = 0
+                            training_q_values[0][1] = 0
+                            training_q_values[0][2] = 0
+                            training_q_values[0][3] = 0
+
+                            print "action.......", action
                             training_q_values[0][action] = output_update
-                            training_q_values[0][not action] = 0
 
                             nn_training_batch_data.append(old_state.reshape(observation_width * observation_height, ))
                             nn_training_batch_labels.append(training_q_values.reshape(4, ))
@@ -235,7 +148,7 @@ class SnakeQNetwork:
                         self.state_prediction_nn.fit(
                             x=nn_training_batch_data,
                             y=nn_training_batch_labels,
-                            nb_epoch=self.nn_train_epochs,
+                            epochs=self.nn_train_epochs,
                             batch_size=self.nn_batch_size)
                 if done:
                     break
@@ -243,28 +156,28 @@ class SnakeQNetwork:
                 self.exploration_factor -= (1.0 / episode_count)
                 self.LOG.info("Exploration factor updated! New value: {v}".format(v=self.exploration_factor))
 
-        self.env.monitor.close()
+        self.env.act(None)
 
-    # def __downscale_image(self, image):
-    #     """
-    #     Resized the input image and converts it to grayscale
-    #     :param image: The image do be downsized and grayscaled
-    #     :return: The grayscale, resized image corresponding to the input image
-    #     """
-    #     grayscale_observation_image = GrayscaleConverter.rgb_to_grayscale(image)
-    #     resized_observation_image = ImageResizer.resize_image(
-    #         image=grayscale_observation_image,
-    #         ratio=self.nn_image_resize_ratio)
-    #     return resized_observation_image
+    def __downscale_image(self, image):
+        """
+        Resized the input image and converts it to grayscale
+        :param image: The image do be downsized and grayscaled
+        :return: The grayscale, resized image corresponding to the input image
+        """
+        grayscale_observation_image = GrayscaleConverter.rgb_to_grayscale(image)
+        resized_observation_image = ImageResizer.resize_image(
+            image=grayscale_observation_image,
+            ratio=0.5)
+        return resized_observation_image
 
     def __initialize_nn(self):
         nn_input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
         nn_hidden_layer_size = 100
-        nn_output_layer_size = 1  # 1 possible action outcome
+        nn_output_layer_size = 4  # 1 possible action outcome
 
         nn_input_layer = Dense(
-            init='lecun_uniform',  # Uniform initialization scaled by the square root of the number of inputs
-            output_dim=nn_hidden_layer_size,
+            kernel_initializer='lecun_uniform',  # Uniform initialization scaled by the square root of the number of inputs
+            units=nn_hidden_layer_size,
             input_shape=(nn_input_layer_size,),
             activation='sigmoid')
 
@@ -272,8 +185,8 @@ class SnakeQNetwork:
                       .format(i=nn_input_layer_size, o=nn_hidden_layer_size))
 
         nn_hidden_layer = Dense(
-            init='lecun_uniform',
-            output_dim=nn_output_layer_size,
+            kernel_initializer='lecun_uniform',
+            units=nn_output_layer_size,
             activation='linear'  # Pass value along -> f(x) = x
         )
 
@@ -291,37 +204,36 @@ class SnakeQNetwork:
             loss='mean_squared_error')
 
     def __take_snake_action(self, snake_action):
-        try:
-            random_number = np.random.random_sample()
-            if not self.q_learning_history.is_full():
-                snake_action = random.choice(self.env.getActionSet())
-                self.LOG.info("Snake chose to do a random move - add to qHistory!")
-                return self.env.act(snake_action)
+        random_number = np.random.random_sample()
+        if not self.q_learning_history.is_full():
+            # print "index:::", self.env.getActionSet().index(snake_action)
+            snake_action = self.env.getActionSet().index(random.choice(self.env.getActionSet()))
+            self.LOG.info("Snake chose to do a random move - add to qHistory!")
+            print "action set:::", self.env.getActionSet()
+            # print "snake action:: ", snake_action
+            return self.env.act(snake_action)
 
-            elif random_number < self.exploration_factor:
-                snake_action = random.choice(self.env.getActionSet())
-                self.LOG.info("Epsilon strikes rand={r} < {ef}! Snake chose random move!"
-                              .format(r=random_number, ef=self.exploration_factor))
-                return self.env.act(snake_action)
+        elif random_number < self.exploration_factor:
+            snake_action = self.env.getActionSet().index(random.choice(self.env.getActionSet()))
+            self.LOG.info("Epsilon strikes rand={r} < {ef}! Snake chose random move!"
+                          .format(r=random_number, ef=self.exploration_factor))
+            return self.env.act(snake_action)
 
-            elif snake_action == "up":
-                self.LOG.info("Snake chose to go up")
-                return self.env.act(snake_action)
+        elif snake_action == 0:
+            self.LOG.info("Snake chose to go up")
+            return self.env.act(snake_action)
 
-            elif snake_action == "down":
-                self.LOG.info("Snake chose to go down")
-                return self.env.act(snake_action)
+        elif snake_action == 3:
+            self.LOG.info("Snake chose to go down")
+            return self.env.act(snake_action)
 
-            elif snake_action == "right":
-                self.LOG.info("Snake chose to go right")
-                return self.env.act(snake_action)
+        elif snake_action == 2:
+            self.LOG.info("Snake chose to go right")
+            return self.env.act(snake_action)
 
-            elif snake_action == "left":
-                self.LOG.info("Snake chose to go left")
-                return self.env.act(snake_action)
-
-        finally:
-            self.env.update()
+        elif snake_action == 1:
+            self.LOG.info("Snake chose to go left")
+            return self.env.act(snake_action)
 
     def __get_custom_reward(self, reward):
         if reward >= 1:
