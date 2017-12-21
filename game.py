@@ -8,6 +8,7 @@ from ple.games import Snake
 from ple import PLE
 import pygame
 import numpy as np
+import time
 
 import random
 from collections import deque
@@ -39,7 +40,7 @@ class QLearningHistory:
 
 
 class SnakeQNetwork:
-    def __init__(self, food_reward=1, dead_reward=-1, alive_reward=0, discount_factor=0.95, nn_batch_size=10,
+    def __init__(self, food_reward=5, dead_reward=-10, alive_reward=1, discount_factor=0.95, nn_batch_size=10,
                  nn_train_epochs=5, nn_history_size=100, nn_history_sample_size=50):
 
         self.LOG = gym.logger
@@ -53,27 +54,26 @@ class SnakeQNetwork:
         self.alive_reward = alive_reward
         self.discount_factor = discount_factor
         self.q_learning_history = QLearningHistory(self.nn_history_size)
-        self.exploration_factor = 1
+        self.exploration_factor = 0.2
 
         self.state_prediction_nn = None
         self.nn_initialized = False
         pygame.init()
 
-        game = Snake(width=200, height=200)
+        game = Snake(width=128, height=128)
         game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)
         game.clock = pygame.time.Clock()
         game.rng = np.random.RandomState(24)
         self.game = game
-        env = PLE(self.game, display_screen=True, fps=30)
+        env = PLE(self.game, display_screen=True)
         env.init()
         self.env = env
 
     def run(self, episode_count=1000, learning_rate=0.5, training=False):
         for episode_idx in range(0, episode_count):
-            self.LOG.info("Episode #{n} started.".format(n=episode_idx))
-            self.game.init()
+            # self.LOG.info("Episode #{n} started.".format(n=episode_idx))
+
             observation = self.env.getScreenGrayscale()
-            # observation_object = self.__downscale_image(observation)
 
             if not self.nn_initialized:
                 self.__initialize_nn()
@@ -82,27 +82,29 @@ class SnakeQNetwork:
 
             observation_width = self.env.getScreenDims()[0]
             observation_height = self.env.getScreenDims()[1]
+            self.game.init()
 
             while True:
                 q_values = self.state_prediction_nn.predict(
                     x=observation.reshape(1, observation_width * observation_height),
                     batch_size=1)
-
                 old_observation = copy.deepcopy(observation)
-                print "q_values ", q_values
-                snake_action = (np.argmax(q_values))  # the predicted action
-                index_of_action_in_q_values = np.where(q_values == snake_action)
-                observation = self.env.getScreenGrayscale()
-                # observation = self.__downscale_image(observation)
-                reward = self.__take_snake_action(index_of_action_in_q_values)
+                print "xczsdfsdddddddddddddddddd q_values ", q_values
+                snake_action = np.argmax(q_values)  # the predicted action
+                print "snake_action ", snake_action
 
-                dt = self.game.clock.tick_busy_loop(100)
-                self.game.step(dt)
+                # index_of_action_in_q_values = np.where(q_values == snake_action)
+                observation = self.env.getScreenGrayscale()
+                # print "!!!!!!!!!!!!!!!!!!!!!!!!", index_of_action_in_q_values
+                reward = self.__take_snake_action(snake_action)
+                # time.sleep(1)
+                # dt = self.game.clock.tick_busy_loop(100)
+                # self.game.step(dt)
                 pygame.display.update()
                 print "\n", self.game.getGameState() ,"\n"
 
                 done = self.env.game_over()
-                self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
+                # self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
 
                 if training:
                     reward = self.__get_custom_reward(reward)
@@ -118,8 +120,8 @@ class SnakeQNetwork:
 
                     if self.q_learning_history.is_full():
                         history_batch = random.sample(self.q_learning_history.get_events(), self.nn_history_sample_size)
-                        self.LOG.info("Sampling {n} events from history with size {s}"
-                                      .format(n=self.nn_history_sample_size, s=self.q_learning_history.size))
+                        # self.LOG.info("Sampling {n} events from history with size {s}"
+                        #               .format(n=self.nn_history_sample_size, s=self.q_learning_history.size))
 
                         nn_training_batch_data = []
                         nn_training_batch_labels = []
@@ -142,12 +144,8 @@ class SnakeQNetwork:
 
                             output_update = learning_rate * (reward + (self.discount_factor * best_q_value_after_action))
 
-                            training_q_values[0][0] = 0
-                            training_q_values[0][1] = 0
-                            training_q_values[0][2] = 0
-                            training_q_values[0][3] = 0
+                            training_q_values[0][:] = 0
 
-                            # print "action.......", action
                             training_q_values[0][action] = output_update
 
                             nn_training_batch_data.append(old_state.reshape(observation_width * observation_height, ))
@@ -168,18 +166,6 @@ class SnakeQNetwork:
                 self.LOG.info("Exploration factor updated! New value: {v}".format(v=self.exploration_factor))
 
         self.env.act(None)
-
-    def __downscale_image(self, image):
-        """
-        Resized the input image and converts it to grayscale
-        :param image: The image do be downsized and grayscaled
-        :return: The grayscale, resized image corresponding to the input image
-        """
-        grayscale_observation_image = GrayscaleConverter.rgb_to_grayscale(image)
-        resized_observation_image = ImageResizer.resize_image(
-            image=grayscale_observation_image,
-            ratio=0.5)
-        return resized_observation_image
 
     def __initialize_nn(self):
         nn_input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
@@ -216,6 +202,8 @@ class SnakeQNetwork:
 
     def __take_snake_action(self, snake_action):
         random_number = np.random.random_sample()
+        print "snake action:: ", snake_action
+
         if not self.q_learning_history.is_full():
             # print "index:::", self.env.getActionSet().index(snake_action)
             snake_action = self.env.getActionSet().index(random.choice(self.env.getActionSet()))
@@ -263,10 +251,9 @@ if __name__ == "__main__":
         food_reward=50,
         dead_reward=-1000,
         alive_reward=1,
-        discount_factor=0.3,  # a future reward is more important than a proximity reward, so closer to 1.
+        discount_factor=0.9,  # a future reward is more important than a proximity reward, so closer to 1.
         nn_batch_size=50,
         nn_train_epochs=5,
-        # nn_image_resize_ratio=0.25,
         nn_history_size=100,
         nn_history_sample_size=50
     )
