@@ -1,6 +1,4 @@
 # Snake
-import keras
-import random
 import gym
 from keras.layers import Dense, copy
 from keras.models import Sequential
@@ -8,14 +6,9 @@ from ple.games import Snake
 from ple import PLE
 import pygame
 import numpy as np
-import time
 
 import random
 from collections import deque
-
-import gym_ple  # Do not delete, even if IDE says it's not used
-
-from utils import GrayscaleConverter, ImageResizer
 
 
 class QLearningHistory:
@@ -60,7 +53,7 @@ class SnakeQNetwork:
         self.nn_initialized = False
         pygame.init()
 
-        game = Snake(width=128, height=128)
+        game = Snake(width=64, height=64)
         game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)
         game.clock = pygame.time.Clock()
         game.rng = np.random.RandomState(24)
@@ -89,19 +82,14 @@ class SnakeQNetwork:
                     x=observation.reshape(1, observation_width * observation_height),
                     batch_size=1)
                 old_observation = copy.deepcopy(observation)
-                print "xczsdfsdddddddddddddddddd q_values ", q_values
-                snake_action = np.argmax(q_values)  # the predicted action
-                print "snake_action ", snake_action
 
-                # index_of_action_in_q_values = np.where(q_values == snake_action)
+                snake_action = np.argmax(q_values)  # the predicted action
+
                 observation = self.env.getScreenGrayscale()
-                # print "!!!!!!!!!!!!!!!!!!!!!!!!", index_of_action_in_q_values
                 reward = self.__take_snake_action(snake_action)
-                # time.sleep(1)
                 dt = self.game.clock.tick_busy_loop(5)
                 self.game.step(dt)
                 pygame.display.update()
-                print "\n", self.game.getGameState() ,"\n"
 
                 done = self.env.game_over()
                 # self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
@@ -135,14 +123,15 @@ class SnakeQNetwork:
                             q_values_after_action = self.state_prediction_nn.predict(
                                 x=new_state.reshape(1, observation_width * observation_height), batch_size=1)
 
-                            best_q_value_after_action = np.max(q_values_after_action)
+                            best_q_value_after_action = np.argmax(q_values_after_action)
 
                             training_q_values = np.zeros((1, 4))  # 4 possible actions
 
                             for value_idx in range(0, len(q_values_before_action)):
                                 training_q_values[value_idx] = q_values_before_action[value_idx]
 
-                            output_update = learning_rate * (reward + (self.discount_factor * best_q_value_after_action))
+                            output_update = learning_rate * (
+                            reward + (self.discount_factor * best_q_value_after_action))
 
                             training_q_values[0][:] = 0
 
@@ -165,7 +154,7 @@ class SnakeQNetwork:
                 self.exploration_factor -= (1.0 / episode_count)
                 self.LOG.info("Exploration factor updated! New value: {v}".format(v=self.exploration_factor))
 
-        self.env.act(None)
+                # self.env.act(None)
 
     def __initialize_nn(self):
         nn_input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
@@ -173,7 +162,8 @@ class SnakeQNetwork:
         nn_output_layer_size = 4  # 1 possible action outcome
 
         nn_input_layer = Dense(
-            kernel_initializer='lecun_uniform',  # Uniform initialization scaled by the square root of the number of inputs
+            kernel_initializer='lecun_uniform',
+            # Uniform initialization scaled by the square root of the number of inputs
             units=nn_hidden_layer_size,
             input_shape=(nn_input_layer_size,),
             activation='sigmoid')
@@ -202,37 +192,34 @@ class SnakeQNetwork:
 
     def __take_snake_action(self, snake_action):
         random_number = np.random.random_sample()
-        print "snake action:: ", snake_action
 
         if not self.q_learning_history.is_full():
-            # print "index:::", self.env.getActionSet().index(snake_action)
-            snake_action = self.env.getActionSet().index(random.choice(self.env.getActionSet()))
+
+            snake_action = random.choice(self.env.getActionSet())
             self.LOG.info("Snake chose to do a random move - add to qHistory!")
-            print "action set:::", self.env.getActionSet()
-            # print "snake action:: ", snake_action
             return self.env.act(snake_action)
 
         elif random_number < self.exploration_factor:
-            snake_action = self.env.getActionSet().index(random.choice(self.env.getActionSet()))
+            snake_action = random.choice(self.env.getActionSet())
             self.LOG.info("Epsilon strikes rand={r} < {ef}! Snake chose random move!"
                           .format(r=random_number, ef=self.exploration_factor))
             return self.env.act(snake_action)
 
         elif snake_action == 0:
             self.LOG.info("Snake chose to go up")
-            return self.env.act(snake_action)
+            return self.env.act(115)
 
         elif snake_action == 3:
             self.LOG.info("Snake chose to go down")
-            return self.env.act(snake_action)
+            return self.env.act(100)
 
         elif snake_action == 2:
             self.LOG.info("Snake chose to go right")
-            return self.env.act(snake_action)
+            return self.env.act(119)
 
         elif snake_action == 1:
             self.LOG.info("Snake chose to go left")
-            return self.env.act(snake_action)
+            return self.env.act(97)
 
     def __get_custom_reward(self, reward):
         if reward >= 1:
@@ -251,7 +238,7 @@ if __name__ == "__main__":
         food_reward=50,
         dead_reward=-1000,
         alive_reward=1,
-        discount_factor=0.9,  # a future reward is more important than a proximity reward, so closer to 1.
+        discount_factor=0.3,  # a future reward is more important than a proximity reward, so closer to 1.
         nn_batch_size=50,
         nn_train_epochs=5,
         nn_history_size=100,
