@@ -98,8 +98,8 @@ class SnakeQNetwork:
                 # print "!!!!!!!!!!!!!!!!!!!!!!!!", index_of_action_in_q_values
                 reward = self.__take_snake_action(snake_action)
                 # time.sleep(1)
-                # dt = self.game.clock.tick_busy_loop(100)
-                # self.game.step(dt)
+                dt = self.game.clock.tick_busy_loop(5)
+                self.game.step(dt)
                 pygame.display.update()
                 print "\n", self.game.getGameState() ,"\n"
 
