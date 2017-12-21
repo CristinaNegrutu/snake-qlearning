@@ -34,7 +34,7 @@ class QLearningHistory:
 
 class SnakeQNetwork:
     def __init__(self, food_reward=5, dead_reward=-10, alive_reward=1, discount_factor=0.95, nn_batch_size=10,
-                 nn_train_epochs=5, nn_history_size=100, nn_history_sample_size=50):
+                 nn_train_epochs=10, nn_history_size=1000, nn_history_sample_size=50):
 
         self.LOG = gym.logger
         self.nn_batch_size = nn_batch_size
@@ -62,7 +62,7 @@ class SnakeQNetwork:
         env.init()
         self.env = env
 
-    def run(self, episode_count=1000, learning_rate=0.5, training=False):
+    def run(self, episode_count=10000, learning_rate=0.5, training=False):
         for episode_idx in range(0, episode_count):
             # self.LOG.info("Episode #{n} started.".format(n=episode_idx))
 
@@ -235,7 +235,7 @@ class SnakeQNetwork:
 
 if __name__ == "__main__":
     nn = SnakeQNetwork(
-        food_reward=50,
+        food_reward=5000,
         dead_reward=-1000,
         alive_reward=1,
         discount_factor=0.3,  # a future reward is more important than a proximity reward, so closer to 1.
