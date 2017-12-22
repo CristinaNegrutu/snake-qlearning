@@ -1,14 +1,12 @@
-# Snake
 import gym
-from keras.layers import Dense, copy
-from keras.models import Sequential
-from ple.games import Snake
-from ple import PLE
+import random
 import pygame
 import numpy as np
-
-import random
+from ple import PLE
+from ple.games import Snake
 from collections import deque
+from keras.layers import Dense, copy
+from keras.models import Sequential
 
 
 class QLearningHistory:
@@ -33,72 +31,65 @@ class QLearningHistory:
 
 
 class SnakeQNetwork:
-    def __init__(self, food_reward=5, dead_reward=-10, alive_reward=1, discount_factor=0.95, nn_batch_size=10,
-                 nn_train_epochs=10, nn_history_size=1000, nn_history_sample_size=50):
+    def __init__(self, food_reward=10,
+                 dead_reward=-10,
+                 alive_reward=2,
+                 discount_factor=0.95,
+                 nn_batch_size=10,
+                 nn_train_epochs=100,
+                 nn_history_size=1000,
+                 nn_history_sample_size=50):
 
-        self.LOG = gym.logger
-        self.nn_batch_size = nn_batch_size
-        self.nn_train_epochs = nn_train_epochs
-
-        self.nn_history_size = nn_history_size
-        self.nn_history_sample_size = nn_history_sample_size
         self.food_reward = food_reward
         self.dead_reward = dead_reward
         self.alive_reward = alive_reward
         self.discount_factor = discount_factor
-        self.q_learning_history = QLearningHistory(self.nn_history_size)
+        self.batch_size = nn_batch_size
+        self.train_epochs = nn_train_epochs
+        self.history_size = nn_history_size
+        self.history_sample_size = nn_history_sample_size
+        self.q_learning_history = QLearningHistory(nn_history_size)
         self.exploration_factor = 0.2
-
-        self.state_prediction_nn = None
-        self.nn_initialized = False
+        self.next_move_prediction = None
+        self.is_neural_network_initialized = False
         pygame.init()
+        self.game = Snake(width=64, height=64)
+        self.env = PLE(self.game, display_screen=True)
+        self.env.init()
+        self.LOG = gym.logger
 
-        game = Snake(width=64, height=64)
-        game.screen = pygame.display.set_mode(game.getScreenDims(), 0, 32)
-        game.clock = pygame.time.Clock()
-        game.rng = np.random.RandomState(24)
-        self.game = game
-        env = PLE(self.game, display_screen=True)
-        env.init()
-        self.env = env
+    def run(self, maximum_number_of_iterations=10000, learning_rate=0.5, training=False):
 
-    def run(self, episode_count=10000, learning_rate=0.5, training=False):
-        for episode_idx in range(0, episode_count):
-            # self.LOG.info("Episode #{n} started.".format(n=episode_idx))
+        for iteration in range(0, maximum_number_of_iterations):
+
+            if not self.is_neural_network_initialized:
+                self.__initialize_nn()
+                self.is_neural_network_initialized = True
 
             observation = self.env.getScreenGrayscale()
-
-            if not self.nn_initialized:
-                self.__initialize_nn()
-                self.nn_initialized = True
-                self.LOG.info("Initialized the neural network!")
-
             observation_width = self.env.getScreenDims()[0]
             observation_height = self.env.getScreenDims()[1]
             self.game.init()
 
+            # exit the while loop only if it's GAME OVER
             while True:
-                q_values = self.state_prediction_nn.predict(
+
+                q_values = self.next_move_prediction.predict(
                     x=observation.reshape(1, observation_width * observation_height),
                     batch_size=1)
-                old_observation = copy.deepcopy(observation)
-
-                snake_action = np.argmax(q_values)  # the predicted action
-
+                best_snake_action = np.argmax(q_values)
+                reward = self.__take_snake_action(best_snake_action)
+                previous_observation = copy.deepcopy(observation)
                 observation = self.env.getScreenGrayscale()
-                reward = self.__take_snake_action(snake_action)
-                dt = self.game.clock.tick_busy_loop(5)
-                self.game.step(dt)
-                pygame.display.update()
+                is_game_over = self.env.game_over()
 
-                done = self.env.game_over()
-                # self.LOG.info("Current action reward: {r}. Done: {d}".format(r=reward, d=done))
+                self.LOG.info("Current action reward: {r}. Is game over: {d}".format(r=reward, d=is_game_over))
 
                 if training:
                     reward = self.__get_custom_reward(reward)
 
                     self.q_learning_history.record_event(
-                        state=old_observation, action=snake_action, reward=reward, new_state=observation)
+                        state=previous_observation, action=best_snake_action, reward=reward, new_state=observation)
 
                     last_event = self.q_learning_history.get_last_event()
                     self.LOG.info("Added event #{n} to history. Action: {a}; Reward: {r}"
@@ -107,101 +98,89 @@ class SnakeQNetwork:
                                           n=self.q_learning_history.size))
 
                     if self.q_learning_history.is_full():
-                        history_batch = random.sample(self.q_learning_history.get_events(), self.nn_history_sample_size)
-                        # self.LOG.info("Sampling {n} events from history with size {s}"
-                        #               .format(n=self.nn_history_sample_size, s=self.q_learning_history.size))
+                        history_batch = random.sample(self.q_learning_history.get_events(), self.history_sample_size)
+                        self.LOG.info("Sampling {n} events from history.".format(n=self.history_sample_size))
 
-                        nn_training_batch_data = []
-                        nn_training_batch_labels = []
+                        training_batch_data = []
+                        training_batch_labels = []
 
                         for history_event in history_batch:
                             old_state, action, reward, new_state = history_event
 
-                            q_values_before_action = self.state_prediction_nn.predict(
+                            q_values_before_action = self.next_move_prediction.predict(
                                 x=old_state.reshape(1, observation_width * observation_height), batch_size=1)
 
-                            q_values_after_action = self.state_prediction_nn.predict(
+                            q_values_after_action = self.next_move_prediction.predict(
                                 x=new_state.reshape(1, observation_width * observation_height), batch_size=1)
 
                             best_q_value_after_action = np.argmax(q_values_after_action)
 
-                            training_q_values = np.zeros((1, 4))  # 4 possible actions
+                            training_q_values = np.zeros((1, 4))
 
                             for value_idx in range(0, len(q_values_before_action)):
                                 training_q_values[value_idx] = q_values_before_action[value_idx]
 
-                            output_update = learning_rate * (
-                            reward + (self.discount_factor * best_q_value_after_action))
+                            output_update = learning_rate * (reward + (self.discount_factor * best_q_value_after_action))
 
                             training_q_values[0][:] = 0
-
                             training_q_values[0][action] = output_update
 
-                            nn_training_batch_data.append(old_state.reshape(observation_width * observation_height, ))
-                            nn_training_batch_labels.append(training_q_values.reshape(4, ))
+                            training_batch_data.append(old_state.reshape(observation_width * observation_height, ))
+                            training_batch_labels.append(training_q_values.reshape(4, ))
 
-                        nn_training_batch_data = np.array(nn_training_batch_data)
-                        nn_training_batch_labels = np.array(nn_training_batch_labels)
+                        training_batch_data = np.array(training_batch_data)
+                        training_batch_labels = np.array(training_batch_labels)
 
-                        self.state_prediction_nn.fit(
-                            x=nn_training_batch_data,
-                            y=nn_training_batch_labels,
-                            epochs=self.nn_train_epochs,
-                            batch_size=self.nn_batch_size)
-                if done:
+                        self.next_move_prediction.fit(
+                            x=training_batch_data,
+                            y=training_batch_labels,
+                            epochs=self.train_epochs,
+                            batch_size=self.batch_size)
+
+                if is_game_over:
                     break
+
             if self.exploration_factor > 0.1:
-                self.exploration_factor -= (1.0 / episode_count)
+                self.exploration_factor -= (1.0 / maximum_number_of_iterations)
                 self.LOG.info("Exploration factor updated! New value: {v}".format(v=self.exploration_factor))
 
-                # self.env.act(None)
-
     def __initialize_nn(self):
-        nn_input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
-        nn_hidden_layer_size = 100
-        nn_output_layer_size = 4  # 1 possible action outcome
+        input_layer_size = self.env.getScreenDims()[0] * self.env.getScreenDims()[1]
+        hidden_layer_size = 100
+        output_layer_size = 4
 
-        nn_input_layer = Dense(
+        input_layer = Dense(
             kernel_initializer='lecun_uniform',
-            # Uniform initialization scaled by the square root of the number of inputs
-            units=nn_hidden_layer_size,
-            input_shape=(nn_input_layer_size,),
+            units=hidden_layer_size,
+            input_shape=(input_layer_size,),
             activation='sigmoid')
 
-        self.LOG.info("Adding layer to neural network: input_size: {i}, output_size: {o}"
-                      .format(i=nn_input_layer_size, o=nn_hidden_layer_size))
-
-        nn_hidden_layer = Dense(
+        hidden_layer = Dense(
             kernel_initializer='lecun_uniform',
-            units=nn_output_layer_size,
-            activation='linear'  # Pass value along -> f(x) = x
+            units=output_layer_size,
+            activation='linear'
         )
 
-        self.LOG.info("Adding layer to neural network: output_size: {o}"
-                      .format(o=nn_output_layer_size))
+        self.next_move_prediction = Sequential()
+        self.next_move_prediction.add(input_layer)
+        self.next_move_prediction.add(hidden_layer)
 
-        self.state_prediction_nn = Sequential()  # Initialize a nn with a linear stack of layers
-        self.state_prediction_nn.add(nn_input_layer)
-        self.state_prediction_nn.add(nn_hidden_layer)
-
-        # use mean squared error regression (aka cost derivative)
-        # to compute errors to propagate backwards
-        self.state_prediction_nn.compile(
+        self.next_move_prediction.compile(
             optimizer='rmsprop',
             loss='mean_squared_error')
 
     def __take_snake_action(self, snake_action):
+
         random_number = np.random.random_sample()
 
         if not self.q_learning_history.is_full():
-
             snake_action = random.choice(self.env.getActionSet())
             self.LOG.info("Snake chose to do a random move - add to qHistory!")
             return self.env.act(snake_action)
 
         elif random_number < self.exploration_factor:
             snake_action = random.choice(self.env.getActionSet())
-            self.LOG.info("Epsilon strikes rand={r} < {ef}! Snake chose random move!"
+            self.LOG.info("Random number is smaller than exploration factor, {r} < {ef}! Snake chose random move!"
                           .format(r=random_number, ef=self.exploration_factor))
             return self.env.act(snake_action)
 
@@ -209,43 +188,43 @@ class SnakeQNetwork:
             self.LOG.info("Snake chose to go up")
             return self.env.act(115)
 
-        elif snake_action == 3:
-            self.LOG.info("Snake chose to go down")
-            return self.env.act(100)
+        elif snake_action == 1:
+            self.LOG.info("Snake chose to go left")
+            return self.env.act(97)
 
         elif snake_action == 2:
             self.LOG.info("Snake chose to go right")
             return self.env.act(119)
 
-        elif snake_action == 1:
-            self.LOG.info("Snake chose to go left")
-            return self.env.act(97)
+        elif snake_action == 3:
+            self.LOG.info("Snake chose to go down")
+            return self.env.act(100)
 
     def __get_custom_reward(self, reward):
         if reward >= 1:
-            self.LOG.info("Has eaten food! -> Reward is {r}".format(r=reward))
+            self.LOG.info("Has eaten food! Reward is {r}".format(r=self.food_reward))
             return self.food_reward
         elif reward >= 0:
-            self.LOG.info("Stayed alive! -> Reward is {r}".format(r=reward))
+            self.LOG.info("Stayed alive! Reward is {r}".format(r=self.alive_reward))
             return self.alive_reward
         else:
-            self.LOG.info("Crashed! -> Reward is {r}".format(r=reward))
+            self.LOG.info("Crashed! Reward is {r}".format(r=self.dead_reward))
             return self.dead_reward
 
 
 if __name__ == "__main__":
     nn = SnakeQNetwork(
-        food_reward=5000,
-        dead_reward=-1000,
-        alive_reward=1,
-        discount_factor=0.3,  # a future reward is more important than a proximity reward, so closer to 1.
-        nn_batch_size=50,
-        nn_train_epochs=5,
-        nn_history_size=100,
-        nn_history_sample_size=50
+        food_reward=10,
+        dead_reward=-10,
+        alive_reward=2,
+        discount_factor=0.3,
+        nn_batch_size=100,
+        nn_train_epochs=20,
+        nn_history_size=1000,
+        nn_history_sample_size=200
     )
     nn.run(
-        episode_count=100,
+        maximum_number_of_iterations=100,
         learning_rate=0.8,
         training=True
     )
